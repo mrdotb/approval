@@ -26,9 +26,11 @@ defmodule ApprovalTest do
       # Suppress logs
       capture_log(fn ->
         # Approve a test for which a reference doesn't exist
-        approve snapshot: File.read!("test/support/image-test-reference.png"),
-                reference: File.read!("test/support/sandbox/image-test-reference.png"),
-                reviewed: false
+        approve(
+          snapshot: "test/support/image-test-reference.png",
+          reference: "test/support/sandbox/image-test-reference.png",
+          reviewed: false
+        )
 
         assert File.exists?("test/support/sandbox/image-test-reference.png")
       end)
@@ -48,9 +50,11 @@ defmodule ApprovalTest do
       log_message =
         capture_log(fn ->
           # Approve a test for which a reference doesn't exist
-          approve snapshot: File.read!("test/support/image-test-reference.png"),
-                  reference: File.read!("test/support/sandbox/image-test-reference.png"),
-                  reviewed: false
+          approve(
+            snapshot: "test/support/image-test-reference.png",
+            reference: "test/support/sandbox/image-test-reference.png",
+            reviewed: false
+          )
 
           assert File.exists?("test/support/sandbox/image-test-reference.png")
         end)
@@ -67,17 +71,21 @@ defmodule ApprovalTest do
 
   test "when the test has been reviewed, it passes when the snapshot matches the reference" do
     # Approve a test for which a reference doesn't exist
-    approve snapshot: File.read!("test/support/image-test-reference.png"),
-            reference: File.read!("test/support/image-test-reference.png"),
-            reviewed: true
+    approve(
+      snapshot: "test/support/image-test-reference.png",
+      reference: "test/support/image-test-reference.png",
+      reviewed: true
+    )
   end
 
   test "when the test has not been reviewed, it always fails (case 1: snapshot matches reference)" do
     assert_raise(Approval.ApprovalError, fn ->
       capture_log(fn ->
-        approve snapshot: File.read!("test/support/image-test.png"),
-                reference: File.read!("test/support/image-test-reference.png"),
-                reviewed: false
+        approve(
+          snapshot: "test/support/image-test.png",
+          reference: "test/support/image-test-reference.png",
+          reviewed: false
+        )
       end)
     end)
   end
@@ -93,9 +101,11 @@ defmodule ApprovalTest do
 
       # The following will raise, but we will catch the exception and continue
       assert_raise(Approval.ApprovalError, fn ->
-        approve snapshot: File.read!("test/support/sandbox/image-test-wrong.png"),
-                reference: File.read!("test/support/image-test-reference.png"),
-                reviewed: true
+        approve(
+          snapshot: "test/support/sandbox/image-test-wrong.png",
+          reference: "test/support/image-test-reference.png",
+          reviewed: true
+        )
       end)
     after
       # Clean up the .diff.html
@@ -104,16 +114,20 @@ defmodule ApprovalTest do
   end
 
   test "when the test has been reviewed and the snapshot matches the reference, the test passes" do
-    approve snapshot: File.read!("test/support/image-test-snapshot.png"),
-            reference: File.read!("test/support/image-test-reference.png"),
-            reviewed: true
+    approve(
+      snapshot: "test/support/image-test-snapshot.png",
+      reference: "test/support/image-test-reference.png",
+      reviewed: true
+    )
   end
 
   test "when the test has been reviewed and the snapshot matches the reference, the test fails" do
     assert_raise(Approval.ApprovalError, fn ->
-      approve snapshot: File.read!("test/support/sandbox/image-test-wrong.png"),
-              reference: File.read!("test/support/image-test-reference.png"),
-              reviewed: true
+      approve(
+        snapshot: "test/support/sandbox/image-test-wrong.png",
+        reference: "test/support/image-test-reference.png",
+        reviewed: true
+      )
     end)
   end
 
@@ -128,9 +142,11 @@ defmodule ApprovalTest do
 
       # The following will raise, but we will catch the exception and continue
       assert_raise(Approval.ApprovalError, fn ->
-        approve snapshot: File.read!("test/support/sandbox/image-test-wrong.png"),
-                reference: File.read!("test/support/image-test-reference.png"),
-                reviewed: true
+        approve(
+          snapshot: "test/support/sandbox/image-test-wrong.png",
+          reference: "test/support/image-test-reference.png",
+          reviewed: true
+        )
       end)
 
       assert File.exists?("test/support/sandbox/image-test-wrong.png" <> ".diff.html")
@@ -150,9 +166,11 @@ defmodule ApprovalTest do
 
       # The following will raise, but we will catch the exception and continue
       assert_raise(Approval.ApprovalError, fn ->
-        approve snapshot: File.read!("test/support/sandbox/image-test-wrong.png"),
-                reference: File.read!("test/support/image-test-reference.png"),
-                reviewed: true
+        approve(
+          snapshot: "test/support/sandbox/image-test-wrong.png",
+          reference: "test/support/image-test-reference.png",
+          reviewed: true
+        )
       end)
 
       diff_file = "test/support/sandbox/image-test-wrong.png" <> ".diff.html"

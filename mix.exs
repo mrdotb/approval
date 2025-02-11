@@ -8,7 +8,7 @@ defmodule Approval.MixProject do
       app: :approval,
       version: @version,
       elixir: "~> 1.16",
-      build_embedded: Mix.env == :prod,
+      build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: [

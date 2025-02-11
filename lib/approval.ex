@@ -7,7 +7,10 @@ defmodule Approval do
   and compare snapshots to the reference images to look for regressions.
   """
 
+  alias Approval.ApprovalError
+
   require EEx
+  require Logger
 
   @external_resource "priv/assets/resemble.js"
   @external_resource "priv/assets/diff.css"
@@ -21,83 +24,70 @@ defmodule Approval do
   def generate_diff_html(reference_path, snapshot_path, reference_data, snapshot_data) do
     diff_path = snapshot_path <> ".diff.html"
 
-    html_file_content = diff_html(
-      snapshot_path: snapshot_path,
-      reference_path: reference_path,
-      snapshot_data: Base.encode64(snapshot_data),
-      reference_data: Base.encode64(reference_data),
-      diff_js: @diff_js,
-      diff_css: @diff_css
-    )
+    html_file_content =
+      diff_html(
+        snapshot_path: snapshot_path,
+        reference_path: reference_path,
+        snapshot_data: Base.encode64(snapshot_data),
+        reference_data: Base.encode64(reference_data),
+        diff_js: @diff_js,
+        diff_css: @diff_css
+      )
 
     File.write!(diff_path, html_file_content)
   end
 
   defp approve_images(reference_path, snapshot_path, reviewed) do
-    quote do
-      require Logger
-      reference_path = unquote(reference_path)
-      snapshot_path = unquote(snapshot_path)
-      reviewed = unquote(reviewed)
-      diff_path = reference_path <> ".diff.html"
+    diff_path = reference_path <> ".diff.html"
 
-      cond do
-        # No reference file exist. In this situation, simply fail the test.
-        # The user has to provide a reference file.
-        not File.exists?(snapshot_path) ->
-          raise Approval.ApprovalError, "snapshot file \"#{Path.relative_to_cwd(snapshot_path)}\" " <>
-            "does not exist."
+    cond do
+      # No snapshot file exists → Test fails
+      not File.exists?(snapshot_path) ->
+        raise ApprovalError,
+              "Snapshot file \"#{Path.relative_to_cwd(snapshot_path)}\" does not exist."
 
-        # This is the first time this test has been run.
-        # In this case, don't fail the test, but emit a warning
-        # so that the user remembers to approve the reference.
-        not File.exists?(reference_path) ->
-          # If the reference file exists (maybe it was taken from somewhere else),
-          # don't overwrite it! Only write a new reference file if it doesn't exist.
-          # Write a NEW reference file
-          File.cp!(snapshot_path, reference_path)
+      # First-time approval → Copy snapshot to reference and warn the user
+      not File.exists?(reference_path) ->
+        File.cp!(snapshot_path, reference_path)
 
-          if not reviewed do
-            Logger.warning("\nThe following reference file must be reviewed: " <>
-              "\"#{Path.relative_to_cwd(reference_path)}\"")
-          end
+        unless reviewed do
+          Logger.warning(
+            "\nThe following reference file must be reviewed: " <>
+              "\"#{Path.relative_to_cwd(reference_path)}\""
+          )
+        end
 
-        # Both the reference file and the snapshot file exist,
-        # and the reference hasn't been reviewed yet
-        reviewed == false ->
-          raise Approval.ApprovalError, "The following reference has not been reviewed: " <>
-            "\"#{Path.relative_to_cwd(reference_path)}\""
+      # Reference exists but has not been reviewed → Raise an error
+      not reviewed ->
+        raise ApprovalError,
+              "The following reference has not been reviewed: " <>
+                "\"#{Path.relative_to_cwd(reference_path)}\""
 
-        # Both the reference file and the snapshot file exist,
-        # and the reference has already been reviewed
-        reviewed == true ->
-          # Finally, we can run a simple honest assert
-          reference_content = File.read!(reference_path)
-          snapshot_content = File.read!(snapshot_path)
+      # Both files exist and have been reviewed → Compare their contents
+      true ->
+        reference_content = File.read!(reference_path)
+        snapshot_content = File.read!(snapshot_path)
 
-          if reference_content == snapshot_content do
-            # Delete the previous HTML diff, which is not needed anymore
-            if File.exists?(diff_path) do
-              File.rm!(diff_path)
-            end
-          else
-            Approval.generate_diff_html(
-              reference_path,
-              snapshot_path,
-              reference_content,
-              snapshot_content
-            )
+        if reference_content == snapshot_content do
+          # No differences → Remove any existing diff file
+          if File.exists?(diff_path), do: File.rm!(diff_path)
+        else
+          Approval.generate_diff_html(
+            reference_path,
+            snapshot_path,
+            reference_content,
+            snapshot_content
+          )
 
-            raise Approval.ApprovalError, """
-              The following reference and snapshot don't match:
+          raise ApprovalError, """
+          The following reference and snapshot don't match:
 
-                    - #{Path.relative_to_cwd(reference_path)}
-                    - #{Path.relative_to_cwd(snapshot_path)}
+                - #{Path.relative_to_cwd(reference_path)}
+                - #{Path.relative_to_cwd(snapshot_path)}
 
-                  To see the differences, open the file "#{Path.relative_to_cwd(diff_path)}".
-              """
-          end
-      end
+              To see the differences, open the file "#{Path.relative_to_cwd(diff_path)}".
+          """
+        end
     end
   end
 
@@ -123,28 +113,21 @@ defmodule Approval do
 
   #{File.read!("README.md") |> String.split("<!-- README SECTION -->") |> Enum.at(1)}
   """
-  defmacro approve(opts) do
-    snapshot = case Keyword.fetch(opts, :snapshot) do
-      {:ok, {{:., _m1, [{:__aliases__, _m2, [:File]}, :read!]}, _m3, [path]}} ->
-        {:path, path}
+  def approve(opts) do
+    snapshot_path =
+      case Keyword.fetch(opts, :snapshot) do
+        {:ok, path} when is_binary(path) -> path
+        _ -> raise ArgumentError, "approve/1 requires a valid :snapshot path"
+      end
 
-      :error ->
-        raise ArgumentError, "accept macro requires a :snapshot"
-    end
-
-    reference = case Keyword.fetch(opts, :reference) do
-      {:ok, {{:., _m1, [{:__aliases__, _m2, [:File]}, :read!]}, _m3, [path]}} ->
-        {:path, path}
-
-      :error ->
-        raise ArgumentError, "accept macro requires a :reference"
-    end
+    reference_path =
+      case Keyword.fetch(opts, :reference) do
+        {:ok, path} when is_binary(path) -> path
+        _ -> raise ArgumentError, "approve/1 requires a valid :reference path"
+      end
 
     reviewed = Keyword.get(opts, :reviewed, false)
 
-    case {reference, snapshot} do
-      {{:path, reference_path}, {:path, snapshot_path}} ->
-        approve_images(reference_path, snapshot_path, reviewed)
-    end
+    approve_images(reference_path, snapshot_path, reviewed)
   end
 end
